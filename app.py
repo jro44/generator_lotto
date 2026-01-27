@@ -3,31 +3,64 @@ import pypdf
 import re
 import random
 import os
+import pandas as pd
+from datetime import datetime
 from collections import Counter
 
-# --- KONFIGURACJA ---
+# --- KONFIGURACJA STRONY ---
+st.set_page_config(
+    page_title="LottoMaster 999",
+    page_icon="🍀",
+    layout="wide"  # Szeroki układ strony, jak na blogu
+)
+
 PLIK_PDF = "999los.pdf"
+PLIK_HISTORII = "historia_losowan.csv"
 
 
-# --- FUNKCJE LOGICZNE ---
+# --- FUNKCJE POMOCNICZE (Baza danych w pliku CSV) ---
 
-@st.cache_data  # To sprawia, że PDF jest czytany tylko raz, a nie przy każdym kliknięciu
+def wczytaj_historie():
+    """Wczytuje historię losowań z pliku CSV."""
+    if os.path.exists(PLIK_HISTORII):
+        return pd.read_csv(PLIK_HISTORII)
+    else:
+        # Tworzymy pustą tabelę, jeśli plik nie istnieje
+        return pd.DataFrame(columns=["Data", "Godzina", "Strategia", "Wylosowane Liczby"])
+
+
+def zapisz_wynik(liczby, strategia):
+    """Dopisuje nowy wynik do pliku CSV."""
+    df = wczytaj_historie()
+
+    teraz = datetime.now()
+    nowy_wiersz = {
+        "Data": teraz.strftime("%Y-%m-%d"),
+        "Godzina": teraz.strftime("%H:%M:%S"),
+        "Strategia": strategia.split(" ")[1],  # Bierze tylko słowo np. GORĄCY
+        "Wylosowane Liczby": str(liczby)
+    }
+
+    # Dodajemy nowy wiersz (używamy concat zamiast append)
+    nowy_df = pd.DataFrame([nowy_wiersz])
+    df = pd.concat([df, nowy_df], ignore_index=True)
+
+    # Zapisujemy do pliku
+    df.to_csv(PLIK_HISTORII, index=False)
+    return df
+
+
+# --- FUNKCJA PARSUJĄCA PDF (Twoja sprawdzona logika) ---
+@st.cache_data
 def wczytaj_dane_z_pdf(sciezka):
-    if not os.path.exists(sciezka):
-        return None
-
+    if not os.path.exists(sciezka): return None
     wszystkie_losowania = []
-
     try:
         reader = pypdf.PdfReader(sciezka)
         for strona in reader.pages:
-            tekst = strona.extract_text()
-            if not tekst: continue
-
-            # Tokenizacja
+            tekst = strona.extract_text() or ""
             raw_tokens = tekst.split()
             clean_tokens = []
-
             for token in raw_tokens:
                 nums = re.findall(r'\d+', token)
                 for num_str in nums:
@@ -45,138 +78,124 @@ def wczytaj_dane_z_pdf(sciezka):
                         else:
                             break
 
-            # Logika parowania ID z liczbami
             page_ids = [t for t in clean_tokens if t >= 6000]
             if not page_ids: continue
-
-            # Znajdujemy indeks pierwszego ID
             try:
                 first_id_index = clean_tokens.index(page_ids[0])
             except:
                 continue
-
-            # Wszystko przed pierwszym ID to potencjalne liczby
             candidate_nums = clean_tokens[:first_id_index]
             valid_nums = [n for n in candidate_nums if 1 <= n <= 49]
-
-            num_draws = len(page_ids)
-            expected = num_draws * 6
-
+            expected = len(page_ids) * 6
             if len(valid_nums) >= expected:
                 final_nums = valid_nums[-expected:]
-                # Zapisujemy w strukturze, żeby zachować kolejność losowań
-                for i in range(num_draws):
-                    # Zakładamy, że ID idą malejąco (7306, 7305...), a liczby są w blokach
-                    # Ponieważ PDFy bywają różne, bierzemy po prostu paczki po 6
-                    los = {
-                        'ID': page_ids[i],
-                        'Liczby': final_nums[i * 6: (i + 1) * 6]
-                    }
-                    wszystkie_losowania.append(los)
-
-    except Exception as e:
-        st.error(f"Błąd odczytu PDF: {e}")
+                for i in range(len(page_ids)):
+                    wszystkie_losowania.append({'Liczby': final_nums[i * 6: (i + 1) * 6]})
+    except:
         return None
-
-    # Sortujemy losowania od najnowszego (najwyższe ID)
-    wszystkie_losowania.sort(key=lambda x: x['ID'], reverse=True)
     return wszystkie_losowania
 
 
+# --- LOGIKA GENERATORA ---
 def generuj_kupon(dane):
-    if not dane:
-        return None, "Brak danych"
-
-    # 1. Wyodrębnienie ostatnich 3 losowań (zakazane dla strategii zimnej)
     ostatnie_3 = dane[:3]
-    zakazane_liczby = set()
-    for los in ostatnie_3:
-        zakazane_liczby.update(los['Liczby'])
+    zakazane = set()
+    for los in ostatnie_3: zakazane.update(los['Liczby'])
 
-    # 2. Statystyka ogólna (dla strategii gorącej)
-    wszystkie_liczby_flat = [n for los in dane for n in los['Liczby']]
-    licznik = Counter(wszystkie_liczby_flat)
+    wszystkie_flat = [n for los in dane for n in los['Liczby']]
+    licznik = Counter(wszystkie_flat)
 
-    # --- DECYZJA LOGICZNA ---
-    # Losujemy liczbę od 0.0 do 1.0
-    # Jeśli wypadnie mniej niż 0.2 (20%), idziemy w strategię ZIMNĄ.
-    # W przeciwnym razie (80%), idziemy w strategię GORĄCĄ.
-
-    los_strategii = random.random()
-    kupon = set()
-    typ_strategii = ""
-
-    if los_strategii < 0.20:
-        # === STRATEGIA ZIMNA (CHAOS) ===
-        typ_strategii = "❄️ ZIMNY STRZAŁ (Unikamy ostatnich liczb)"
-
-        # Pula: Liczby 1-49, ale BEZ tych, które padły w ostatnich 3 losowaniach
-        pula_dozwolona = [n for n in range(1, 50) if n not in zakazane_liczby]
-
-        # Z tej puli wybieramy te, które historycznie padały NAJRZADZIEJ
-        # Sortujemy pulę wg częstości występowania (rosnąco)
-        pula_posortowana = sorted(pula_dozwolona, key=lambda x: licznik.get(x, 0))
-
-        # Bierzemy 15 najrzadszych z dozwolonych i losujemy z nich 6
-        pula_najzimniejsza = pula_posortowana[:15]
-        kupon = set(random.sample(pula_najzimniejsza, 6))
-
+    if random.random() < 0.20:
+        typ = "❄️ ZIMNY"
+        pula = [n for n in range(1, 50) if n not in zakazane]
+        pula_sorted = sorted(pula, key=lambda x: licznik.get(x, 0))
+        kupon = set(random.sample(pula_sorted[:15], 6))
     else:
-        # === STRATEGIA GORĄCA (STATYSTYKA) ===
-        typ_strategii = "🔥 GORĄCY TYP (Wysokie prawdopodobieństwo)"
-
-        # Przygotowanie wag do losowania
+        typ = "🔥 GORĄCY"
         populacja = list(licznik.keys())
         wagi = list(licznik.values())
-
-        # Losujemy 6 liczb (ważone częstością)
+        kupon = set()
         while len(kupon) < 6:
-            kandydat = random.choices(populacja, weights=wagi, k=1)[0]
-            kupon.add(kandydat)
+            kupon.add(random.choices(populacja, weights=wagi, k=1)[0])
 
-    return sorted(list(kupon)), typ_strategii
+    return sorted(list(kupon)), typ
 
 
-# --- INTERFEJS STRONY ---
+# --- UKŁAD STRONY (BLOG) ---
 def main():
-    st.set_page_config(page_title="Generator Lotto 999", page_icon="🎰")
+    # 1. SIDEBAR (Panel boczny z informacjami)
+    with st.sidebar:
+        st.image("https://cdn-icons-png.flaticon.com/512/2550/2550269.png", width=100)
+        st.title("LottoMaster 999")
+        st.write("Profesjonalny analizator oparty na 999 ostatnich losowaniach.")
 
-    st.title("🎰 Inteligentny Generator")
+        # Licznik (pobieramy z długości historii)
+        historia = wczytaj_historie()
+        liczba_uzyc = len(historia)
+        st.metric(label="Wygenerowanych Kuponów", value=liczba_uzyc)
+
+        st.info("Algorytm aktualizowany: 2026")
+
+    # 2. GŁÓWNA TREŚĆ
+    st.title("🍀 Generator Szczęśliwych Liczb")
     st.markdown("""
-    System analizuje **998 losowań** z bazy PDF.
-    - **80% szans:** System dobierze liczby statystycznie najczęstsze.
-    - **20% szans:** System zagra "pod prąd" (ominie ostatnie wyniki i wybierze liczby zaległe).
+    Witaj na blogu LottoMaster! Nasz algorytm to hybryda matematyki i teorii chaosu.
+    Nie strzelaj na oślep – zaufaj statystyce.
+
+    **Jak to działa?**
+    * Analizujemy PDF z 999 losowaniami.
+    * W 80% przypadków stosujemy **Strategię Gorącą** (liczby najczęstsze).
+    * W 20% przypadków stosujemy **Strategię Zimną** (szukamy zaległych liczb).
     """)
 
-    # Wczytanie danych
+    # Sprawdzenie bazy
     if not os.path.exists(PLIK_PDF):
-        st.error(f"⚠️ Nie znaleziono pliku {PLIK_PDF}. Wgraj go do repozytorium.")
+        st.error("Błąd: Brak pliku bazy danych!")
         return
 
     dane = wczytaj_dane_z_pdf(PLIK_PDF)
+    if not dane:
+        st.error("Błąd parsowania PDF.")
+        return
 
-    if dane:
-        st.success(f"✅ Baza danych aktywna: {len(dane)} losowań.")
+    # Sekcja Generatora
+    st.divider()
+    col1, col2 = st.columns([2, 1])
 
-        st.write("---")
+    with col1:
+        st.subheader("🤖 Uruchom System")
+        if st.button("GENERUJ ZESTAW", type="primary", use_container_width=True):
+            with st.spinner("Obliczam prawdopodobieństwo..."):
+                liczby, strategia = generuj_kupon(dane)
 
-        # Wielki przycisk
-        if st.button("🎲 GENERUJ ZESTAW", use_container_width=True, type="primary"):
-            with st.spinner("Maszyna losująca ruszyła..."):
-                liczby, opis = generuj_kupon(dane)
+                # Zapisz do historii
+                zapisz_wynik(liczby, strategia)
 
-                # Wyświetlanie wyniku
-                st.subheader("Twój Zestaw:")
-                cols = st.columns(6)
-                for i, num in enumerate(liczby):
-                    cols[i].metric(label=f"Liczba {i + 1}", value=num)
+                # Wyświetl wynik
+                st.success(f"Twój zestaw ({strategia}):")
+                st.markdown(f"## 🎲 {str(liczby)}")
+                st.balloons()
 
-                if "ZIMNY" in opis:
-                    st.warning(opis)
-                else:
-                    st.info(opis)
+    with col2:
+        st.info("💡 **Wskazówka:**\nJeśli system wylosuje strategię ZIMNĄ, warto puścić ten kupon jako dodatkowy!")
+
+    # 3. TABELA HISTORII (Ostatnie 10)
+    st.divider()
+    st.subheader("📜 Ostatnie 10 wygenerowanych zestawów")
+    st.write("Zobacz, co system wylosował dla innych użytkowników:")
+
+    # Odświeżamy historię po kliknięciu
+    historia_aktualna = wczytaj_historie()
+
+    # Pokazujemy tylko 10 ostatnich (odwrócona kolejność, żeby najnowsze były u góry)
+    if not historia_aktualna.empty:
+        st.dataframe(
+            historia_aktualna.tail(10).iloc[::-1],
+            use_container_width=True,
+            hide_index=True
+        )
     else:
-        st.error("Nie udało się przetworzyć pliku PDF.")
+        st.write("Brak historii. Bądź pierwszy!")
 
 
 if __name__ == "__main__":
