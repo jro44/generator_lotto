@@ -3,12 +3,12 @@ import pypdf
 import re
 import random
 import os
-import pandas as pd
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from datetime import datetime
 from collections import Counter
+import pandas as pd
 
 # --- KONFIGURACJA STRONY ---
 st.set_page_config(
@@ -19,14 +19,25 @@ st.set_page_config(
 
 PLIK_PDF = "999los.pdf"
 
-# --- INICJALIZACJA PRYWATNEJ HISTORII ---
-# To jest kluczowy moment - tworzymy "pustą kartkę" dla każdego nowego użytkownika
+# --- INICJALIZACJA STANU (Prywatna pamięć) ---
 if 'moje_losowania' not in st.session_state:
     st.session_state['moje_losowania'] = []
 
+if 'powitanie_ok' not in st.session_state:
+    st.session_state['powitanie_ok'] = False
+
+
+# --- FUNKCJA POWITALNA (POP-UP) ---
+@st.dialog("👋 Witaj w LottoMaster!")
+def okno_powitalne():
+    st.write("Autor programu wita i życzy wysokich wygranych!")
+    st.write("Powodzenia!")
+    if st.button("OK, wchodzę do gry!", type="primary"):
+        st.session_state['powitanie_ok'] = True
+        st.rerun()
+
 
 # --- FUNKCJE POMOCNICZE (Email) ---
-
 def wyslij_email_kontaktowy(tresc_wiadomosci, email_kontaktowy):
     """Wysyła email używając bezpiecznych zmiennych środowiskowych (Secrets)"""
     try:
@@ -59,7 +70,6 @@ def wyslij_email_kontaktowy(tresc_wiadomosci, email_kontaktowy):
         server.quit()
         return True
     except Exception as e:
-        # st.error(f"Debug błędu: {e}") # Odkomentuj tylko do testów
         return False
 
 
@@ -133,11 +143,14 @@ def generuj_kupon(dane):
 
 # --- GŁÓWNA APLIKACJA ---
 def main():
+    # 1. Sprawdzenie czy pokazać powitanie (To musi być na początku)
+    if not st.session_state['powitanie_ok']:
+        okno_powitalne()
+
+    # 2. Reszta aplikacji (ładuje się w tle)
     with st.sidebar:
         st.image("https://cdn-icons-png.flaticon.com/512/2550/2550269.png", width=100)
         st.title("LottoMaster 999")
-
-        # Licznik PRYWATNY (ile razy TY kliknąłeś w tej sesji)
         ile_prywatnie = len(st.session_state['moje_losowania'])
         st.metric("Twoje losowania w tej sesji", ile_prywatnie)
 
@@ -159,29 +172,26 @@ def main():
             with st.spinner("Analiza..."):
                 liczby, strategia = generuj_kupon(dane)
 
-                # --- ZAPISYWANIE DO PRYWATNEJ HISTORII ---
                 teraz = datetime.now()
                 nowy_wpis = {
                     "Godzina": teraz.strftime("%H:%M:%S"),
                     "Strategia": strategia,
                     "Liczby": str(liczby)
                 }
-                # Dodajemy na początek listy (żeby było najnowsze u góry)
                 st.session_state['moje_losowania'].insert(0, nowy_wpis)
 
                 st.success(f"Twój zestaw ({strategia}):")
                 st.markdown(f"## 🎲 {str(liczby)}")
                 st.balloons()
-
-                st.success("🏆 Autor programu (AK93®) życzy Wysokich wygranych!")
+                st.success("🏆 Autor programu życzy Wysokich wygranych!")
 
     with col2:
-        st.info("💡 **Wskazówka:** Każde losowanie jest unikalne i zapisuje się tylko w Twojej historii poniżej. :)")
+        st.info("💡 **Wskazówka:** Każde losowanie jest unikalne i zapisuje się tylko w Twojej historii poniżej.")
 
-    # --- SEKCJA KONTAKTOWA ---
+    # --- KONTAKT ---
     st.divider()
     st.subheader("📬 Pochwal się wygraną!")
-    st.write("Jeżeli wygrałeś za pomocą programu i zechciałbyś o tym poinformować - napisz do nas! 😜")
+    st.write("Jeżeli wygrałeś za pomocą programu i zechciałbyś o tym poinformować - napisz do nas!")
 
     with st.form("formularz_kontaktowy"):
         wiadomosc = st.text_area("Twoja wiadomość:", placeholder="Trafiłem czwórkę! Dzięki!")
@@ -197,21 +207,18 @@ def main():
                     if wyslij_email_kontaktowy(wiadomosc, email_gracza):
                         st.success("Wiadomość została wysłana! Dziękujemy!")
                     else:
-                        st.error("Nie udało się wysłać wiadomości. Sprawdź poprawność danych.")
+                        st.error("Nie udało się wysłać wiadomości.")
 
-    # --- TABELA HISTORII PRYWATNEJ (OSTATNIE 20) ---
+    # --- HISTORIA ---
     st.divider()
     st.subheader("📜 Twoja prywatna historia (ostatnie 20 losowań)")
 
     if st.session_state['moje_losowania']:
-        # Bierzemy tylko 20 pierwszych elementów z listy (najnowszych)
         historia_do_pokazania = st.session_state['moje_losowania'][:20]
-
-        # Tworzymy ładną tabelkę
         df_historia = pd.DataFrame(historia_do_pokazania)
         st.dataframe(df_historia, use_container_width=True, hide_index=True)
     else:
-        st.write("Jeszcze nic nie wylosowałeś. Kliknij przycisk powyżej!")
+        st.write("Jeszcze nic nie wylosowałeś.")
 
 
 if __name__ == "__main__":
