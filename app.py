@@ -10,35 +10,103 @@ from datetime import datetime
 from collections import Counter
 import pandas as pd
 
-# --- KONFIGURACJA STRONY ---
+# --- 1. KONFIGURACJA STRONY ---
 st.set_page_config(
     page_title="LottoMaster 999",
-    page_icon="🍀",
+    page_icon="🎱",
     layout="wide"
 )
 
 PLIK_PDF = "999los.pdf"
 
-# --- INICJALIZACJA STANU ---
+
+# --- 2. STYLIZACJA (CSS) - KOLORY LOTTO ---
+def local_css():
+    st.markdown("""
+    <style>
+    /* Tło całej aplikacji - jasny błękit */
+    .stApp {
+        background-color: #F0F8FF;
+        color: #000000;
+    }
+
+    /* Przyciski - Żółte/Złote jak w Lotto */
+    div.stButton > button {
+        background-color: #FFD700 !important;
+        color: #000000 !important;
+        border-radius: 10px;
+        border: 2px solid #DAA520;
+        font-weight: bold;
+        transition: 0.3s;
+    }
+    div.stButton > button:hover {
+        background-color: #FFC125 !important;
+        border-color: #000000;
+        transform: scale(1.02);
+    }
+
+    /* Nagłówki - Ciemny granat/Czarny */
+    h1, h2, h3 {
+        color: #191970 !important;
+        font-family: 'Arial', sans-serif;
+    }
+
+    /* Wyśrodkowanie tekstów w oknie dialogowym */
+    .center-text {
+        text-align: center;
+        font-size: 18px;
+    }
+
+    /* Ramki komunikatów */
+    .stSuccess {
+        background-color: #E6FFE6;
+        border-left: 5px solid #00CC00;
+    }
+
+    /* Sidebar */
+    [data-testid="stSidebar"] {
+        background-color: #E1EEF6;
+        border-right: 1px solid #B0C4DE;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+
+local_css()
+
+# --- 3. INICJALIZACJA STANU ---
 if 'moje_losowania' not in st.session_state:
     st.session_state['moje_losowania'] = []
 
 if 'powitanie_ok' not in st.session_state:
     st.session_state['powitanie_ok'] = False
 
+# Generowanie zagadki matematycznej (anty-spam) tylko raz na sesję lub po przeladowaniu
+if 'captcha_a' not in st.session_state:
+    st.session_state['captcha_a'] = random.randint(1, 10)
+    st.session_state['captcha_b'] = random.randint(1, 10)
 
-# --- OKNO POWITALNE ---
+
+# --- 4. OKNO POWITALNE (Wyśrodkowane) ---
 @st.dialog("👋 Witaj w LottoMaster!")
 def okno_powitalne():
-    st.write("Pamiętaj że program typuje losowe cyfry które nie dają gwarancji wygranej! 🤑")
-    st.write("A.K 🫵")
-    st.write("Powodzenia!")
-    if st.button("OK, wchodzę do gry!", type="primary"):
-        st.session_state['powitanie_ok'] = True
-        st.rerun()
+    st.markdown("""
+        <div class="center-text">
+            <b>Pamiętaj że cyfry są wybierane losowo na podstawie algorytzmu aplikacji!!</b><br>
+            <br>Aplikacja nie daje gwarancji wygranej! Pozdrawiam A.K!<br>
+            <br>Przygotuj się na wielkie emocje.<br>
+            Powodzenia!
+        </div>
+    """, unsafe_allow_html=True)
+
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        if st.button("OK, wchodzę do gry!", type="primary", use_container_width=True):
+            st.session_state['powitanie_ok'] = True
+            st.rerun()
 
 
-# --- EMAILE ---
+# --- 5. EMAILE ---
 def wyslij_email_kontaktowy(tresc_wiadomosci, email_kontaktowy):
     try:
         nadawca = st.secrets["EMAIL_USER"]
@@ -70,7 +138,7 @@ def wyslij_email_kontaktowy(tresc_wiadomosci, email_kontaktowy):
         return False
 
 
-# --- PARSER PDF ---
+# --- 6. PARSER PDF ---
 @st.cache_data
 def wczytaj_dane_z_pdf(sciezka):
     if not os.path.exists(sciezka): return None
@@ -115,7 +183,7 @@ def wczytaj_dane_z_pdf(sciezka):
     return wszystkie_losowania
 
 
-# --- GENERATOR ---
+# --- 7. GENERATOR ---
 def generuj_kupon(dane):
     ostatnie_3 = dane[:3]
     zakazane = set()
@@ -138,32 +206,33 @@ def generuj_kupon(dane):
     return sorted(list(kupon)), typ
 
 
-# --- FUNKCJA TWORZĄCA PLIK TXT ---
+# --- 8. PLIK TXT ---
 def przygotuj_plik_txt(historia):
     tekst = "--- TWOJE WYNIKI LOTTOMASTER 999 ---\n"
     tekst += f"Data pobrania: {datetime.now().strftime('%Y-%m-%d %H:%M')}\n"
     tekst += "-------------------------------------\n\n"
-
     for i, wpis in enumerate(historia):
         tekst += f"Losowanie #{i + 1} | Godz: {wpis['Godzina']}\n"
         tekst += f"Strategia: {wpis['Strategia']}\n"
         tekst += f"LICZBY: {wpis['Liczby']}\n"
         tekst += "-------------------------------------\n"
-
     return tekst
 
 
-# --- GŁÓWNA APLIKACJA ---
+# --- 9. GŁÓWNA APLIKACJA ---
 def main():
     if not st.session_state['powitanie_ok']:
         okno_powitalne()
 
     with st.sidebar:
         st.image("https://cdn-icons-png.flaticon.com/512/2550/2550269.png", width=100)
-        st.title("LottoMaster 999")
+        st.markdown("<h2 style='text-align: center; color: #000;'>LottoMaster 999</h2>", unsafe_allow_html=True)
         st.metric("Twoje losowania w sesji", len(st.session_state['moje_losowania']))
+        st.info("System oparty na analizie 999 ostatnich losowań.")
 
-    st.title("🍀 Generator Szczęśliwych Liczb")
+    st.markdown("<h1 style='text-align: center; color: #191970;'>🍀 Generator Szczęśliwych Liczb</h1>",
+                unsafe_allow_html=True)
+    st.markdown("<p style='text-align: center;'>Analiza statystyczna + Teoria Chaosu</p>", unsafe_allow_html=True)
 
     if not os.path.exists(PLIK_PDF):
         st.error("Błąd: Brak pliku PDF!")
@@ -177,8 +246,8 @@ def main():
     col1, col2 = st.columns([2, 1])
 
     with col1:
-        if st.button("GENERUJ ZESTAW", type="primary", use_container_width=True):
-            with st.spinner("Analiza..."):
+        if st.button("GENERUJ ZESTAW 🎲", type="primary", use_container_width=True):
+            with st.spinner("Maszyna losująca w ruchu..."):
                 liczby, strategia = generuj_kupon(dane)
 
                 teraz = datetime.now()
@@ -190,51 +259,77 @@ def main():
                 st.session_state['moje_losowania'].insert(0, nowy_wpis)
 
                 st.success(f"Twój zestaw ({strategia}):")
-                st.markdown(f"## 🎲 {str(liczby)}")
+                st.markdown(f"<h2 style='text-align: center; color: #000;'>{' - '.join(map(str, liczby))}</h2>",
+                            unsafe_allow_html=True)
                 st.balloons()
-                st.success("🏆 Autor programu życzy Wysokich wygranych!")
+                st.markdown(
+                    "<div style='text-align: center; background-color: #FFD700; padding: 10px; border-radius: 5px; color: black;'><b>🏆 Autor programu życzy Wysokich wygranych! 🏆</b></div>",
+                    unsafe_allow_html=True)
 
     with col2:
-        st.info("💡 **Wskazówka:** Każde losowanie jest unikalne i zapisuje się tylko w Twojej historii poniżej.")
+        st.warning("💡 **Strategia:**\nSystem automatycznie dobiera liczby 'Gorące' (częste) lub 'Zimne' (zaległe).")
 
+    # --- 10. KONTAKT Z ANTY-SPAMEM ---
     st.divider()
-    st.subheader("📬 Pochwal się wygraną!")
+    st.markdown("<h3 style='text-align: center;'>📬 Pochwal się wygraną!</h3>", unsafe_allow_html=True)
+    st.write("Wygrałeś? Daj nam znać!")
+
     with st.form("formularz_kontaktowy"):
         wiadomosc = st.text_area("Twoja wiadomość:", placeholder="Wygrałem...")
         email_gracza = st.text_input("Twój email (opcjonalnie):")
-        if st.form_submit_button("Wyślij email"):
-            if wiadomosc:
-                if wyslij_email_kontaktowy(wiadomosc, email_gracza):
-                    st.success("Wysłano!")
-                else:
-                    st.error("Błąd wysyłania.")
-            else:
-                st.warning("Wpisz wiadomość.")
 
-    # --- SEKCJA HISTORII I ZAPISU ---
+        st.markdown("---")
+        st.write("**Zabezpieczenie przed botami:**")
+
+        # Matematyczna CAPTCHA
+        col_c1, col_c2 = st.columns(2)
+        with col_c1:
+            a = st.session_state['captcha_a']
+            b = st.session_state['captcha_b']
+            st.markdown(f"#### Ile to jest **{a} + {b}**?")
+        with col_c2:
+            odpowiedz_uzytkownika = st.number_input("Wpisz wynik:", min_value=0, max_value=100, step=1)
+
+        wyslij_btn = st.form_submit_button("Wyślij email")
+
+        if wyslij_btn:
+            # Weryfikacja Anty-Spam
+            poprawny_wynik = st.session_state['captcha_a'] + st.session_state['captcha_b']
+
+            if odpowiedz_uzytkownika != poprawny_wynik:
+                st.error(
+                    f"❌ Błąd: Wynik dodawania jest niepoprawny! ({a} + {b} to nie {odpowiedz_uzytkownika}). Spróbuj ponownie.")
+            elif not wiadomosc:
+                st.warning("⚠️ Wpisz treść wiadomości.")
+            else:
+                with st.spinner("Wysyłanie wiadomości..."):
+                    if wyslij_email_kontaktowy(wiadomosc, email_gracza):
+                        st.success("✅ Wiadomość została wysłana! Dziękujemy!")
+                        # Resetujemy captchę po udanym wysłaniu
+                        st.session_state['captcha_a'] = random.randint(1, 10)
+                        st.session_state['captcha_b'] = random.randint(1, 10)
+                    else:
+                        st.error("❌ Błąd wysyłania (sprawdź konfigurację serwera).")
+
+    # --- 11. HISTORIA I ZAPIS ---
     st.divider()
     st.subheader("📜 Twoja prywatna historia")
 
     historia_do_pokazania = []
     if st.session_state['moje_losowania']:
-        # Pobieramy max 20 ostatnich
         historia_do_pokazania = st.session_state['moje_losowania'][:20]
 
-        # --- PRZYCISK POBIERANIA PLIKU ---
-        # Tworzymy treść pliku tekstowego
         plik_txt = przygotuj_plik_txt(historia_do_pokazania)
 
-        col_down1, col_down2 = st.columns([1, 3])
+        col_down1, col_down2 = st.columns([1, 4])
         with col_down1:
             st.download_button(
                 label="💾 Zapisz wyniki (TXT)",
                 data=plik_txt,
                 file_name="GenWynLotto.txt",
-                mime="text/plain",
-                type="secondary"
+                mime="text/plain"
             )
 
-        # Wyświetlamy tabelę
         df_historia = pd.DataFrame(historia_do_pokazania)
         st.dataframe(df_historia, use_container_width=True, hide_index=True)
     else:
