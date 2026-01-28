@@ -30,7 +30,7 @@ if 'powitanie_ok' not in st.session_state:
 # --- FUNKCJA POWITALNA (POP-UP) ---
 @st.dialog("👋 Witaj w LottoMaster!")
 def okno_powitalne():
-    st.write("Autor programu wita i życzy wysokich wygranych!")
+    st.write("Pamiętaj że typowane liczby to liczby przypadkowe, wyliczone na podstawie algorytmu aplikacji. One nie dają gwarancji wygranej. Pozdrawiam AK :)")
     st.write("Powodzenia!")
     if st.button("OK, wchodzę do gry!", type="primary"):
         st.session_state['powitanie_ok'] = True
