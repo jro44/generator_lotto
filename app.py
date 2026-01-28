@@ -21,7 +21,7 @@ st.set_page_config(
 PLIK_PDF = "999los.pdf"
 
 
-# --- 2. STYLIZACJA (CSS) - KOLORY LOTTO ---
+# --- 2. STYLIZACJA (CSS) - KOLORY LOTTO & BIAŁE CZCIONKI ---
 def local_css():
     st.markdown("""
     <style>
@@ -31,22 +31,41 @@ def local_css():
         color: #000000;
     }
 
-    /* Przyciski - Żółte/Złote jak w Lotto */
+    /* --- PRZYCISKI (BUTTONS) --- */
+    /* Zmieniamy na Granatowe tło + Biały tekst + Żółta ramka */
     div.stButton > button {
-        background-color: #FFD700 !important;
-        color: #000000 !important;
+        background-color: #191970 !important; /* Ciemny granat */
+        color: #FFFFFF !important; /* BIAŁY TEKST */
         border-radius: 10px;
-        border: 2px solid #DAA520;
+        border: 2px solid #FFD700 !important; /* Złota ramka */
         font-weight: bold;
         transition: 0.3s;
     }
     div.stButton > button:hover {
-        background-color: #FFC125 !important;
-        border-color: #000000;
+        background-color: #0000CD !important; /* Nieco jaśniejszy granat po najechaniu */
+        border-color: #FFFFFF !important;
         transform: scale(1.02);
     }
 
-    /* Nagłówki - Ciemny granat/Czarny */
+    /* --- ETYKIETY PÓL (LABELS) --- */
+    /* "Twoja wiadomość", "Twój email" itp. */
+    .stTextArea label, .stTextInput label, .stNumberInput label {
+        color: #FFFFFF !important; /* BIAŁY TEKST */
+        background-color: #191970 !important; /* Granatowe tło pod napisem */
+        padding: 4px 10px !important;
+        border-radius: 5px !important;
+        font-weight: bold !important;
+        width: fit-content !important;
+        margin-bottom: 5px !important;
+        box-shadow: 2px 2px 5px rgba(0,0,0,0.2);
+    }
+
+    /* Tekst wewnątrz pól wpisywania (żeby był ciemny i czytelny na białym tle pola) */
+    .stTextArea textarea, .stTextInput input {
+        color: #000000 !important;
+    }
+
+    /* Nagłówki - Ciemny granat */
     h1, h2, h3 {
         color: #191970 !important;
         font-family: 'Arial', sans-serif;
@@ -283,7 +302,7 @@ def main():
     st.markdown("<h3 style='text-align: center;'>📬 Pochwal się wygraną!</h3>", unsafe_allow_html=True)
     st.write("Wygrałeś? Daj nam znać!")
 
-    # LOGIKA BLOKADY: Sprawdzamy, czy email został już wysłany
+    # LOGIKA BLOKADY
     if st.session_state['email_wyslany']:
         st.success("✅ Dziękujemy! Twoja wiadomość została już wysłana w tej sesji.")
         st.info("Aby wysłać kolejną wiadomość, musisz odświeżyć stronę lub wejść ponownie.")
@@ -295,11 +314,11 @@ def main():
             st.markdown("---")
             st.write("**Zabezpieczenie przed botami:**")
 
-            # Matematyczna CAPTCHA
             col_c1, col_c2 = st.columns(2)
             with col_c1:
                 a = st.session_state['captcha_a']
                 b = st.session_state['captcha_b']
+                # Pytanie matematyczne też będzie miało białą etykietę dzięki naszym stylom
                 st.markdown(f"#### Ile to jest **{a} + {b}**?")
             with col_c2:
                 odpowiedz_uzytkownika = st.number_input("Wpisz wynik:", min_value=0, max_value=100, step=1)
@@ -307,26 +326,25 @@ def main():
             wyslij_btn = st.form_submit_button("Wyślij email")
 
             if wyslij_btn:
-                # Obliczamy poprawny wynik
                 poprawny_wynik = st.session_state['captcha_a'] + st.session_state['captcha_b']
 
                 if odpowiedz_uzytkownika != poprawny_wynik:
-                    # BŁĄD: Zmieniamy liczby i przeładowujemy
+                    # BŁĄD -> Nowe liczby -> Przeładowanie
                     st.session_state['captcha_a'] = random.randint(1, 10)
                     st.session_state['captcha_b'] = random.randint(1, 10)
                     st.error(f"❌ Błąd! Wynik jest niepoprawny. Równanie zostało zmienione dla bezpieczeństwa.")
-                    time.sleep(2)  # Krótka pauza żeby użytkownik zobaczył błąd
-                    st.rerun()  # Przeładowanie strony z nowym równaniem
+                    time.sleep(2)
+                    st.rerun()
 
                 elif not wiadomosc:
                     st.warning("⚠️ Wpisz treść wiadomości.")
 
                 else:
-                    # SUKCES: Wysyłamy i blokujemy
+                    # SUKCES -> Wysyłka -> Blokada
                     with st.spinner("Wysyłanie wiadomości..."):
                         if wyslij_email_kontaktowy(wiadomosc, email_gracza):
-                            st.session_state['email_wyslany'] = True  # BLOKADA
-                            st.rerun()  # Przeładowanie, żeby ukryć formularz
+                            st.session_state['email_wyslany'] = True
+                            st.rerun()
                         else:
                             st.error("❌ Błąd wysyłania (sprawdź konfigurację serwera).")
 
