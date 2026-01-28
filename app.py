@@ -262,4 +262,98 @@ def main():
                 teraz = datetime.now()
                 nowy_wpis = {
                     "Godzina": teraz.strftime("%H:%M:%S"),
-                    "Strategia":
+                    "Strategia": strategia,
+                    "Liczby": str(liczby)
+                }
+                st.session_state['moje_losowania'].insert(0, nowy_wpis)
+
+                st.success(f"Twój zestaw ({strategia}):")
+                st.markdown(f"<h2 style='text-align: center; color: #000;'>{' - '.join(map(str, liczby))}</h2>",
+                            unsafe_allow_html=True)
+                st.balloons()
+                st.markdown(
+                    "<div style='text-align: center; background-color: #FFD700; padding: 10px; border-radius: 5px; color: black;'><b>🏆 Autor programu życzy Wysokich wygranych! 🏆</b></div>",
+                    unsafe_allow_html=True)
+
+    with col2:
+        st.warning("💡 **Strategia:**\nSystem automatycznie dobiera liczby 'Gorące' (częste) lub 'Zimne' (zaległe).")
+
+    # --- 10. KONTAKT Z ANTY-SPAMEM I BLOKADĄ ---
+    st.divider()
+    st.markdown("<h3 style='text-align: center;'>📬 Pochwal się wygraną!</h3>", unsafe_allow_html=True)
+    st.write("Wygrałeś? Daj nam znać!")
+
+    # LOGIKA BLOKADY: Sprawdzamy, czy email został już wysłany
+    if st.session_state['email_wyslany']:
+        st.success("✅ Dziękujemy! Twoja wiadomość została już wysłana w tej sesji.")
+        st.info("Aby wysłać kolejną wiadomość, musisz odświeżyć stronę lub wejść ponownie.")
+    else:
+        with st.form("formularz_kontaktowy"):
+            wiadomosc = st.text_area("Twoja wiadomość:", placeholder="Wygrałem...")
+            email_gracza = st.text_input("Twój email (opcjonalnie):")
+
+            st.markdown("---")
+            st.write("**Zabezpieczenie przed botami:**")
+
+            # Matematyczna CAPTCHA
+            col_c1, col_c2 = st.columns(2)
+            with col_c1:
+                a = st.session_state['captcha_a']
+                b = st.session_state['captcha_b']
+                st.markdown(f"#### Ile to jest **{a} + {b}**?")
+            with col_c2:
+                odpowiedz_uzytkownika = st.number_input("Wpisz wynik:", min_value=0, max_value=100, step=1)
+
+            wyslij_btn = st.form_submit_button("Wyślij email")
+
+            if wyslij_btn:
+                # Obliczamy poprawny wynik
+                poprawny_wynik = st.session_state['captcha_a'] + st.session_state['captcha_b']
+
+                if odpowiedz_uzytkownika != poprawny_wynik:
+                    # BŁĄD: Zmieniamy liczby i przeładowujemy
+                    st.session_state['captcha_a'] = random.randint(1, 10)
+                    st.session_state['captcha_b'] = random.randint(1, 10)
+                    st.error(f"❌ Błąd! Wynik jest niepoprawny. Równanie zostało zmienione dla bezpieczeństwa.")
+                    time.sleep(2)  # Krótka pauza żeby użytkownik zobaczył błąd
+                    st.rerun()  # Przeładowanie strony z nowym równaniem
+
+                elif not wiadomosc:
+                    st.warning("⚠️ Wpisz treść wiadomości.")
+
+                else:
+                    # SUKCES: Wysyłamy i blokujemy
+                    with st.spinner("Wysyłanie wiadomości..."):
+                        if wyslij_email_kontaktowy(wiadomosc, email_gracza):
+                            st.session_state['email_wyslany'] = True  # BLOKADA
+                            st.rerun()  # Przeładowanie, żeby ukryć formularz
+                        else:
+                            st.error("❌ Błąd wysyłania (sprawdź konfigurację serwera).")
+
+    # --- 11. HISTORIA I ZAPIS ---
+    st.divider()
+    st.subheader("📜 Twoja prywatna historia")
+
+    historia_do_pokazania = []
+    if st.session_state['moje_losowania']:
+        historia_do_pokazania = st.session_state['moje_losowania'][:20]
+
+        plik_txt = przygotuj_plik_txt(historia_do_pokazania)
+
+        col_down1, col_down2 = st.columns([1, 4])
+        with col_down1:
+            st.download_button(
+                label="💾 Zapisz wyniki (TXT)",
+                data=plik_txt,
+                file_name="GenWynLotto.txt",
+                mime="text/plain"
+            )
+
+        df_historia = pd.DataFrame(historia_do_pokazania)
+        st.dataframe(df_historia, use_container_width=True, hide_index=True)
+    else:
+        st.write("Jeszcze nic nie wylosowałeś.")
+
+
+if __name__ == "__main__":
+    main()
