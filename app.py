@@ -19,7 +19,7 @@ st.set_page_config(
 
 PLIK_PDF = "999los.pdf"
 
-# --- INICJALIZACJA STANU (Prywatna pamięć) ---
+# --- INICJALIZACJA STANU ---
 if 'moje_losowania' not in st.session_state:
     st.session_state['moje_losowania'] = []
 
@@ -27,19 +27,19 @@ if 'powitanie_ok' not in st.session_state:
     st.session_state['powitanie_ok'] = False
 
 
-# --- FUNKCJA POWITALNA (POP-UP) ---
+# --- OKNO POWITALNE ---
 @st.dialog("👋 Witaj w LottoMaster!")
 def okno_powitalne():
-    st.write("Pamiętaj że typowane liczby to liczby przypadkowe, wyliczone na podstawie algorytmu aplikacji. One nie dają gwarancji wygranej. Pozdrawiam AK :)")
+    st.write("Pamiętaj że program typuje losowe cyfry które nie dają gwarancji wygranej! 🤑")
+    st.write("A.K 🫵")
     st.write("Powodzenia!")
     if st.button("OK, wchodzę do gry!", type="primary"):
         st.session_state['powitanie_ok'] = True
         st.rerun()
 
 
-# --- FUNKCJE POMOCNICZE (Email) ---
+# --- EMAILE ---
 def wyslij_email_kontaktowy(tresc_wiadomosci, email_kontaktowy):
-    """Wysyła email używając bezpiecznych zmiennych środowiskowych (Secrets)"""
     try:
         nadawca = st.secrets["EMAIL_USER"]
         haslo = st.secrets["EMAIL_PASSWORD"]
@@ -52,13 +52,10 @@ def wyslij_email_kontaktowy(tresc_wiadomosci, email_kontaktowy):
 
         body = f"""
         Użytkownik generatora przesłał wiadomość o wygranej!
-
         --------------------------------------------------
-        Treść wiadomości:
         {tresc_wiadomosci}
         --------------------------------------------------
-
-        Email kontaktowy podany przez użytkownika: {email_kontaktowy}
+        Email kontaktowy: {email_kontaktowy}
         """
         msg.attach(MIMEText(body, 'plain'))
 
@@ -69,11 +66,11 @@ def wyslij_email_kontaktowy(tresc_wiadomosci, email_kontaktowy):
         server.sendmail(nadawca, odbiorca, text)
         server.quit()
         return True
-    except Exception as e:
+    except Exception:
         return False
 
 
-# --- FUNKCJA PARSUJĄCA PDF ---
+# --- PARSER PDF ---
 @st.cache_data
 def wczytaj_dane_z_pdf(sciezka):
     if not os.path.exists(sciezka): return None
@@ -118,7 +115,7 @@ def wczytaj_dane_z_pdf(sciezka):
     return wszystkie_losowania
 
 
-# --- LOGIKA GENERATORA ---
+# --- GENERATOR ---
 def generuj_kupon(dane):
     ostatnie_3 = dane[:3]
     zakazane = set()
@@ -141,18 +138,30 @@ def generuj_kupon(dane):
     return sorted(list(kupon)), typ
 
 
+# --- FUNKCJA TWORZĄCA PLIK TXT ---
+def przygotuj_plik_txt(historia):
+    tekst = "--- TWOJE WYNIKI LOTTOMASTER 999 ---\n"
+    tekst += f"Data pobrania: {datetime.now().strftime('%Y-%m-%d %H:%M')}\n"
+    tekst += "-------------------------------------\n\n"
+
+    for i, wpis in enumerate(historia):
+        tekst += f"Losowanie #{i + 1} | Godz: {wpis['Godzina']}\n"
+        tekst += f"Strategia: {wpis['Strategia']}\n"
+        tekst += f"LICZBY: {wpis['Liczby']}\n"
+        tekst += "-------------------------------------\n"
+
+    return tekst
+
+
 # --- GŁÓWNA APLIKACJA ---
 def main():
-    # 1. Sprawdzenie czy pokazać powitanie (To musi być na początku)
     if not st.session_state['powitanie_ok']:
         okno_powitalne()
 
-    # 2. Reszta aplikacji (ładuje się w tle)
     with st.sidebar:
         st.image("https://cdn-icons-png.flaticon.com/512/2550/2550269.png", width=100)
         st.title("LottoMaster 999")
-        ile_prywatnie = len(st.session_state['moje_losowania'])
-        st.metric("Twoje losowania w tej sesji", ile_prywatnie)
+        st.metric("Twoje losowania w sesji", len(st.session_state['moje_losowania']))
 
     st.title("🍀 Generator Szczęśliwych Liczb")
 
@@ -188,33 +197,44 @@ def main():
     with col2:
         st.info("💡 **Wskazówka:** Każde losowanie jest unikalne i zapisuje się tylko w Twojej historii poniżej.")
 
-    # --- KONTAKT ---
     st.divider()
     st.subheader("📬 Pochwal się wygraną!")
-    st.write("Jeżeli wygrałeś za pomocą programu i zechciałbyś o tym poinformować - napisz do nas!")
-
     with st.form("formularz_kontaktowy"):
-        wiadomosc = st.text_area("Twoja wiadomość:", placeholder="Trafiłem czwórkę! Dzięki!")
-        email_gracza = st.text_input("Twój email (opcjonalnie):", placeholder="jan@kowalski.pl")
-
-        wyslij_btn = st.form_submit_button("Wyślij email")
-
-        if wyslij_btn:
-            if not wiadomosc:
-                st.warning("Napisz chociaż kilka słów!")
+        wiadomosc = st.text_area("Twoja wiadomość:", placeholder="Wygrałem...")
+        email_gracza = st.text_input("Twój email (opcjonalnie):")
+        if st.form_submit_button("Wyślij email"):
+            if wiadomosc:
+                if wyslij_email_kontaktowy(wiadomosc, email_gracza):
+                    st.success("Wysłano!")
+                else:
+                    st.error("Błąd wysyłania.")
             else:
-                with st.spinner("Wysyłanie wiadomości..."):
-                    if wyslij_email_kontaktowy(wiadomosc, email_gracza):
-                        st.success("Wiadomość została wysłana! Dziękujemy!")
-                    else:
-                        st.error("Nie udało się wysłać wiadomości.")
+                st.warning("Wpisz wiadomość.")
 
-    # --- HISTORIA ---
+    # --- SEKCJA HISTORII I ZAPISU ---
     st.divider()
-    st.subheader("📜 Twoja prywatna historia (ostatnie 20 losowań)")
+    st.subheader("📜 Twoja prywatna historia")
 
+    historia_do_pokazania = []
     if st.session_state['moje_losowania']:
+        # Pobieramy max 20 ostatnich
         historia_do_pokazania = st.session_state['moje_losowania'][:20]
+
+        # --- PRZYCISK POBIERANIA PLIKU ---
+        # Tworzymy treść pliku tekstowego
+        plik_txt = przygotuj_plik_txt(historia_do_pokazania)
+
+        col_down1, col_down2 = st.columns([1, 3])
+        with col_down1:
+            st.download_button(
+                label="💾 Zapisz wyniki (TXT)",
+                data=plik_txt,
+                file_name="GenWynLotto.txt",
+                mime="text/plain",
+                type="secondary"
+            )
+
+        # Wyświetlamy tabelę
         df_historia = pd.DataFrame(historia_do_pokazania)
         st.dataframe(df_historia, use_container_width=True, hide_index=True)
     else:
